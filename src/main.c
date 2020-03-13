@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -74,6 +75,22 @@ static ao_sample_format sample_format = {
     AO_FMT_NATIVE,
     "L,R"
 };
+typedef struct {
+    char station[1024];
+    char bitRate[1024];
+    char title[1024];
+    char artist[1024];
+    char album[1024];
+    char genre[1024];
+    char location[1024];
+    char slogan[1024];
+    char alert[1024];
+    char message[1024];
+} StationInfo;
+
+StationInfo stationInfo;
+
+static int audio(state_t *st);
 
 static ao_device *open_ao_live()
 {
@@ -238,7 +255,7 @@ static void dump_ber(float cber)
     count += 1;
     if (cber < min) min = cber;
     if (cber > max) max = cber;
-    log_info("BER: %f, avg: %f, min: %f, max: %f", cber, sum / count, min, max);
+    log_trace("BER: %f, avg: %f, min: %f, max: %f", cber, sum / count, min, max);
 }
 
 static void done_signal(state_t *st)
@@ -277,6 +294,7 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
 
     switch (evt->event)
     {
+
     case NRSC5_EVENT_LOST_DEVICE:
         done_signal(st);
         break;
@@ -284,7 +302,7 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
         dump_ber(evt->ber.cber);
         break;
     case NRSC5_EVENT_MER:
-        log_info("MER: %.1f dB (lower), %.1f dB (upper)", evt->mer.lower, evt->mer.upper);
+        log_trace("MER: %.1f dB (lower), %.1f dB (upper)", evt->mer.lower, evt->mer.upper);
         break;
     case NRSC5_EVENT_IQ:
         if (st->iq_file)
@@ -299,7 +317,7 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
             st->audio_packets++;
             st->audio_bytes += evt->hdc.count * sizeof(evt->hdc.data[0]);
             if (st->audio_packets >= 32) {
-                log_info("Audio bit rate: %.1f kbps", (float)st->audio_bytes * 8 * 44100 / 2048 / st->audio_packets / 1000);
+                log_trace("Audio bit rate: %.1f kbps", (float)st->audio_bytes * 8 * 44100 / 2048 / st->audio_packets / 1000);
                 st->audio_packets = 0;
                 st->audio_bytes = 0;
             }
@@ -309,33 +327,41 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
         push_audio_buffer(st, evt->audio.program, evt->audio.data, evt->audio.count);
         break;
     case NRSC5_EVENT_SYNC:
-        log_info("Synchronized");
+        log_trace("Synchronized");
         st->audio_ready = 0;
         break;
     case NRSC5_EVENT_LOST_SYNC:
-        log_info("Lost synchronization");
+        log_trace("Lost synchronization");
         break;
     case NRSC5_EVENT_ID3:
         if (evt->id3.program == st->program)
         {
-            if (evt->id3.title)
+            if (evt->id3.title && strncmp(evt->id3.title, stationInfo.title, strlen(evt->id3.title)) != 0) {
                 log_info("Title: %s", evt->id3.title);
-            if (evt->id3.artist)
+                strncpy(stationInfo.title, evt->id3.title, strlen(evt->id3.title));
+            }
+            if (evt->id3.artist && strncmp(evt->id3.artist, stationInfo.artist, 1024)) {
                 log_info("Artist: %s", evt->id3.artist);
-            if (evt->id3.album)
+                strncpy(stationInfo.artist, evt->id3.artist, 1023);
+            }
+            if (evt->id3.album && strncmp(evt->id3.album, stationInfo.album, strlen(evt->id3.album))!= 0) {
                 log_info("Album: %s", evt->id3.album);
-            if (evt->id3.genre)
+                strncpy(stationInfo.album, evt->id3.album, 1023);
+            }
+            if (evt->id3.genre && strncmp(evt->id3.genre, stationInfo.genre, strlen(evt->id3.genre))!=0) {
                 log_info("Genre: %s", evt->id3.genre);
+                strncpy(stationInfo.genre, evt->id3.genre, 1023);
+            }
             if (evt->id3.ufid.owner)
                 log_info("Unique file identifier: %s %s", evt->id3.ufid.owner, evt->id3.ufid.id);
             if (evt->id3.xhdr.param >= 0)
-                log_info("XHDR: %d %08X %d", evt->id3.xhdr.param, evt->id3.xhdr.mime, evt->id3.xhdr.lot);
+                log_trace("XHDR: %d %08X %d", evt->id3.xhdr.param, evt->id3.xhdr.mime, evt->id3.xhdr.lot);
         }
         break;
     case NRSC5_EVENT_SIG:
         for (sig_service = evt->sig.services; sig_service != NULL; sig_service = sig_service->next)
         {
-            log_info("SIG Service: type=%s number=%d name=%s",
+            log_trace("SIG Service: type=%s number=%d name=%s",
                      sig_service->type == NRSC5_SIG_SERVICE_AUDIO ? "audio" : "data",
                      sig_service->number, sig_service->name);
 
@@ -343,12 +369,12 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
             {
                 if (sig_component->type == NRSC5_SIG_SERVICE_AUDIO)
                 {
-                    log_info("  Audio component: id=%d port=%04X type=%d mime=%08X", sig_component->id,
+                    log_trace("  Audio component: id=%d port=%04X type=%d mime=%08X", sig_component->id,
                              sig_component->audio.port, sig_component->audio.type, sig_component->audio.mime);
                 }
                 else if (sig_component->type == NRSC5_SIG_SERVICE_DATA)
                 {
-                    log_info("  Data component: id=%d port=%04X service_data_type=%d type=%d mime=%08X",
+                    log_trace("  Data component: id=%d port=%04X service_data_type=%d type=%d mime=%08X",
                              sig_component->id, sig_component->data.port, sig_component->data.service_data_type,
                              sig_component->data.type, sig_component->data.mime);
                 }
@@ -358,23 +384,31 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
     case NRSC5_EVENT_LOT:
         if (st->aas_files_path)
             dump_aas_file(st, evt);
-        log_info("LOT file: port=%04X lot=%d name=%s size=%d mime=%08X", evt->lot.port, evt->lot.lot, evt->lot.name, evt->lot.size, evt->lot.mime);
+        log_trace("LOT file: port=%04X lot=%d name=%s size=%d mime=%08X", evt->lot.port, evt->lot.lot, evt->lot.name, evt->lot.size, evt->lot.mime);
         break;
     case NRSC5_EVENT_SIS:
         if (evt->sis.country_code)
-            log_info("Country: %s, FCC facility ID: %d", evt->sis.country_code, evt->sis.fcc_facility_id);
-        if (evt->sis.name)
+            log_trace("Country: %s, FCC facility ID: %d", evt->sis.country_code, evt->sis.fcc_facility_id);
+        if (evt->sis.name && strncmp(evt->sis.name, stationInfo.station, strlen(evt->sis.name))!=0) {
             log_info("Station name: %s", evt->sis.name);
-        if (evt->sis.slogan)
+            strncpy(stationInfo.station, evt->sis.name, 1023);
+        }
+        if (evt->sis.slogan && strncmp(stationInfo.slogan, evt->sis.slogan, 1023) !=0 ) {
             log_info("Slogan: %s", evt->sis.slogan);
-        if (evt->sis.message)
-            log_info("Message: %s", evt->sis.message);
-        if (evt->sis.alert)
-            log_info("Alert: %s", evt->sis.alert);
+            strncpy(stationInfo.slogan, evt->sis.slogan, 1023);
+        }
+        if (evt->sis.message && strncmp(stationInfo.message, evt->sis.message, 1023) != 0) {
+            log_trace("Message: %s", evt->sis.message);
+            strncpy(stationInfo.message, evt->sis.message, 1023);
+        }
+        if (evt->sis.alert && strncmp(stationInfo.alert, evt->sis.alert, 1023) !=0) {
+            log_trace("Alert: %s", evt->sis.alert);
+            strncpy(stationInfo.alert, evt->sis.alert, 1023);
+        }
         if (!isnan(evt->sis.latitude))
-            log_info("Station location: %f, %f, %dm", evt->sis.latitude, evt->sis.longitude, evt->sis.altitude);
+            log_trace("Station location: %f, %f, %dm", evt->sis.latitude, evt->sis.longitude, evt->sis.altitude);
         for (audio_service = evt->sis.audio_services; audio_service != NULL; audio_service = audio_service->next)
-            log_info("Audio program %d: %s, type %d, sound experience %d",
+            log_trace("Audio program %d: %s, type %d, sound experience %d",
                      audio_service->program, audio_service->access ? "restricted" : "public",
                      audio_service->type, audio_service->sound_exp);
         for (data_service = evt->sis.data_services; data_service != NULL; data_service = data_service->next)
@@ -615,6 +649,8 @@ int main(int argc, char *argv[])
 {
     pthread_mutex_t log_mutex;
     pthread_t input_thread;
+    pthread_t audio_thread;
+
     nrsc5_t *radio = NULL;
     state_t *st = calloc(1, sizeof(state_t));
 
@@ -647,15 +683,22 @@ int main(int argc, char *argv[])
     }
     else
     {
+
         if (nrsc5_open(&radio, st->device_index, st->ppm_error) != 0)
         {
             log_fatal("Open device failed.");
             return 1;
         }
     }
+    pthread_create(&audio_thread, NULL, &audio, st);
+    float stations[] = {96900000.000000, 103500000.000000};
+    for (int i = 0; i < sizeof(stations); i++) {
+
+    }
+    log_info("freq: %f", st->freq);
     if (nrsc5_set_frequency(radio, st->freq) != 0)
     {
-        log_fatal("Set frequency failed.");
+        log_fatal("Set frequency failed.", st->freq);
         return 1;
     }
     if (st->gain >= 0.0f)
@@ -665,6 +708,23 @@ int main(int argc, char *argv[])
 
     pthread_create(&input_thread, NULL, input_main, st);
 
+    //audio
+
+    //pthread_cancel(input_thread);
+    // pthread_cancel(audio_thread);
+    pthread_join(audio_thread, NULL);
+    pthread_join(input_thread, NULL);
+
+    nrsc5_stop(radio);
+    nrsc5_close(radio);
+    cleanup(st);
+    free(st);
+    ao_shutdown();
+    return 0;
+}
+
+
+static int audio(state_t *st) {
     while (1)
     {
         audio_buffer_t *b;
@@ -696,14 +756,4 @@ int main(int argc, char *argv[])
         pthread_cond_signal(&st->cond);
         pthread_mutex_unlock(&st->mutex);
     }
-
-    pthread_cancel(input_thread);
-    pthread_join(input_thread, NULL);
-
-    nrsc5_stop(radio);
-    nrsc5_close(radio);
-    cleanup(st);
-    free(st);
-    ao_shutdown();
-    return 0;
 }

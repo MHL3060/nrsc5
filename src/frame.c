@@ -164,7 +164,7 @@ static int fix_header(frame_t *st, uint8_t *buf)
             return 0;
 
     if (corrections > 0)
-        log_debug("RS corrected %d symbols", corrections);
+        log_trace("RS corrected %d symbols", corrections);
 
     for (i = 0; i < RS_CODEWORD_LEN; i++)
         buf[i] = hdr[RS_BLOCK_LEN-i-1];
@@ -250,7 +250,7 @@ static unsigned int parse_hef(uint8_t *buf, unsigned int length, hef_t *hef)
                 }
                 break;
             default:
-                log_debug("unknown header expansion ID");
+                log_trace("unknown header expansion ID");
         }
     } while (*(byte++) & 0x80);
 
@@ -317,7 +317,7 @@ static void aas_push(frame_t *st, uint8_t* psd, unsigned int length)
     }
     else if (fcs16(psd, length) != VALIDFCS16)
     {
-        log_info("psd crc mismatch");
+        log_debug("psd crc mismatch");
     }
     else if (psd[0] != 0x21)
     {
@@ -382,7 +382,7 @@ static void process_fixed_ccc(frame_t *st, uint8_t *buf, unsigned int buflen)
         {
             uint16_t mode = buf[1 + i * 4] | (buf[2 + i * 4] << 8);
             uint16_t length = buf[3 + i * 4] | (buf[4 + i * 4] << 8);
-            log_info("Subchannel %d: mode=%d, length=%d", i, mode, length);
+            log_debug("Subchannel %d: mode=%d, length=%d", i, mode, length);
 
             if (mode == 0)
             {
@@ -530,7 +530,7 @@ void frame_process(frame_t *st, size_t length)
                 }
                 else
                 {
-                    log_debug("ignoring partial pdu");
+                    log_trace("ignoring partial pdu");
                 }
             }
             else if (j == hdr.nop - 1 && hdr.plast)
