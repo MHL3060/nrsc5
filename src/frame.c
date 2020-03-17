@@ -516,7 +516,7 @@ void frame_process(frame_t *st, size_t length)
             unsigned int cnt = start + locations[j] - offset;
             if (crc8(st->buffer + offset, cnt + 1) != 0)
             {
-                log_warn("crc mismatch!");
+                log_debug("crc mismatch!");
                 offset += cnt + 1;
                 continue;
             }

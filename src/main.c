@@ -35,6 +35,7 @@
 
 #include "bitwriter.h"
 #include "log.h"
+#include "private.h"
 
 #define AUDIO_BUFFERS 128
 #define AUDIO_THRESHOLD 40
@@ -87,6 +88,11 @@ typedef struct {
     char alert[1024];
     char message[1024];
 } StationInfo;
+
+typedef struct {
+    state_t * st;
+    nrsc5_t * radio;
+} Radio_st;
 
 StationInfo stationInfo;
 
@@ -426,10 +432,10 @@ static void restore_termios(void *arg)
 }
 #endif
 
-static void *input_main(void *arg)
+static void *input_main(Radio_st *arg)
 {
-    state_t *st = arg;
-
+    state_t *st = arg->st;
+    nrsc5_t * radio = arg->radio;
     if (!isatty(STDIN_FILENO))
         return NULL;
 
@@ -451,6 +457,8 @@ static void *input_main(void *arg)
 #ifdef __MINGW32__
         ch = _getch();
 #else
+        log_info("waiting for input");
+
         if (read(STDIN_FILENO, &ch, 1) != 1)
             break;
 #endif
@@ -468,7 +476,18 @@ static void *input_main(void *arg)
         case '3':
             change_program(st, ch - '0');
             break;
+        case 'f':
+            radio->stopped = 1;
+            nrsc5_set_frequency(radio, 96900000);
+            radio->stopped = 0;
+            break;
+        case 't':
+            radio->stopped = 1;
+            nrsc5_set_frequency(radio, 103500000);
+            radio->stopped = 0;
+            break;
         }
+
     }
 
 #ifndef __MINGW32__
@@ -690,11 +709,9 @@ int main(int argc, char *argv[])
             return 1;
         }
     }
+    //start audio
     pthread_create(&audio_thread, NULL, &audio, st);
-    float stations[] = {96900000.000000, 103500000.000000};
-    for (int i = 0; i < sizeof(stations); i++) {
 
-    }
     log_info("freq: %f", st->freq);
     if (nrsc5_set_frequency(radio, st->freq) != 0)
     {
@@ -706,12 +723,13 @@ int main(int argc, char *argv[])
     nrsc5_set_callback(radio, callback, st);
     nrsc5_start(radio);
 
-    pthread_create(&input_thread, NULL, input_main, st);
+    Radio_st radioSt = {
+            st,
+            radio
+    };
+    pthread_create(&input_thread, NULL, input_main, &radioSt);
 
-    //audio
 
-    //pthread_cancel(input_thread);
-    // pthread_cancel(audio_thread);
     pthread_join(audio_thread, NULL);
     pthread_join(input_thread, NULL);
 
@@ -722,7 +740,6 @@ int main(int argc, char *argv[])
     ao_shutdown();
     return 0;
 }
-
 
 static int audio(state_t *st) {
     while (1)
