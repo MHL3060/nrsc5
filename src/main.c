@@ -465,27 +465,40 @@ static void *input_main(Radio_st *arg)
 
         switch (ch)
         {
-        case 'q':
-            done_signal(st);
-            // user wants to immediately exit, so reset audio buffer
-            change_program(st, -1);
-            break;
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-            change_program(st, ch - '0');
-            break;
-        case 'f':
-            radio->stopped = 1;
-            nrsc5_set_frequency(radio, 96900000);
-            radio->stopped = 0;
-            break;
-        case 't':
-            radio->stopped = 1;
-            nrsc5_set_frequency(radio, 103500000);
-            radio->stopped = 0;
-            break;
+            case 'q':
+                done_signal(st);
+                // user wants to immediately exit, so reset audio buffer
+                change_program(st, -1);
+                break;
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+                change_program(st, ch - '0');
+                break;
+            case 'j':
+                radio->stopped = 1;
+                nrsc5_set_frequency(radio, 96900000);
+                radio->stopped = 0;
+                break;
+            case 't':
+                radio->stopped = 1;
+                nrsc5_set_frequency(radio, 103500000);
+                reset_audio_buffers(st);
+                radio->stopped = 0;
+                break;
+            case 'r':
+                radio->stopped = 1;
+                nrsc5_set_frequency(radio, 101100000);
+                reset_audio_buffers(st);
+                radio->stopped = 0;
+                break;
+            case 'c':
+                radio->stopped = 1;
+                nrsc5_set_frequency(radio, 104300000);
+                reset_audio_buffers(st);
+                radio->stopped = 0;
+                break;
         }
 
     }
